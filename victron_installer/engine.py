@@ -40,18 +40,35 @@ def request_json(url, token, body=None, timeout=30):
         if len(raw) > 6 * 1024 * 1024:
             raise Refused("Antwoord is te groot.")
         return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        code = e.code
+        if code == 401:
+            detail = "De toegangssleutel wordt niet aanvaard"
+        elif code == 403:
+            detail = "Deze aanvraag wordt geweigerd; controleer leesrechten en repositorytoegang"
+        elif code == 404:
+            detail = "De gevraagde repository of gegevens zijn met deze sleutel niet bereikbaar"
+        elif code == 429:
+            detail = "Er zijn tijdelijk te veel aanvragen; probeer later opnieuw"
+        else:
+            detail = "De server heeft de aanvraag niet bevestigd"
+        raise Refused(detail + " (HTTP " + str(code) + ").") from None
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
         # Do not include request headers, tokens, response bodies or private URLs.
         raise Refused("Verbinding of antwoord niet bevestigd (" + type(e).__name__ + ").") from None
 
 class GitHub:
     def __init__(self, token):
-        self.token = token
+        self.token = str(token or "").strip()
 
     def get(self, path):
         if not self.token:
             raise Refused("Vul eerst een GitHub-token met alleen leestoegang in bij de appconfiguratie.")
-        return request_json("https://api.github.com/repos/" + REPO + path, self.token)
+        label = "bronversie" if path.startswith("/commits/") else "testresultaten" if path.startswith("/actions/") else "pakketbestand"
+        try:
+            return request_json("https://api.github.com/repos/" + REPO + path, self.token)
+        except Refused as e:
+            raise Refused("GitHub " + label + ": " + str(e)) from None
 
     def contents(self, path, commit):
         if not re.fullmatch(r"[a-f0-9]{40}", commit):

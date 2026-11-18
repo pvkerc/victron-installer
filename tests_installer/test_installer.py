@@ -308,3 +308,24 @@ def test_ingress_rejects_non_proxy_and_missing_identity(setup):
     assert not h.allowed()
     h.headers = {"X-Remote-User-Id": "user"}
     assert h.allowed()
+
+@pytest.mark.parametrize("status", [401, 403, 404, 429, 500])
+def test_http_errors_identify_status_without_credentials(monkeypatch, status):
+    import urllib.error
+    class Opener:
+        def open(self, req, timeout):
+            raise urllib.error.HTTPError(req.full_url, status, "denied", {}, None)
+    monkeypatch.setattr(engine.urllib.request, "build_opener", lambda *args: Opener())
+    with pytest.raises(Refused) as caught:
+        engine.request_json("https://api.github.com/repos/private/example", "never-print-this-secret")
+    assert "HTTP " + str(status) in str(caught.value)
+    assert "never-print-this-secret" not in str(caught.value)
+    assert "private/example" not in str(caught.value)
+
+def test_github_trims_pasted_token_and_reports_failing_step(monkeypatch):
+    def request(url, token, body=None, timeout=30):
+        assert token == "example-token"
+        raise Refused("Denied (HTTP 404).")
+    monkeypatch.setattr(engine, "request_json", request)
+    with pytest.raises(Refused, match="GitHub bronversie:"):
+        GitHub("  example-token\n").get("/commits/main")

@@ -1,5 +1,5 @@
 name: Victron updates
-version: "0.1.0"
+version: "0.1.1"
 slug: victron_installer
 description: Goedgekeurde Victron-versies uit je priveopslag installeren met back-up.
 arch:
