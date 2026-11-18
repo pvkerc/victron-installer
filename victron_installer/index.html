@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="nl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Victron updates</title>
+<style>
+:root{font:17px/1.55 system-ui;color:#19352f;background:#f2f6f2}body{margin:0;padding:28px}
+main{max-width:760px;margin:auto}h1{font-size:2rem;letter-spacing:-.04em;margin:10px 0}
+section{background:white;border:1px solid #d5e2d8;border-radius:18px;padding:24px;margin:20px 0}
+small{color:#50695d}button{font:inherit;border:0;border-radius:10px;padding:12px 20px;background:#17664c;color:white;cursor:pointer;margin:10px 8px 0 0}
+button:disabled{opacity:.45;cursor:wait}.secondary{color:#17664c;background:#e6f0e8}
+.error{color:#943522;white-space:pre-wrap}#notes{white-space:pre-wrap}label{display:block;margin-top:16px}
+</style><main>
+<small>HOME ASSISTANT · VICTRON</small><h1>Updates, met jouw akkoord</h1>
+<p>Controleer een nieuwe versie en kies zelf wanneer die wordt geplaatst.</p>
+<section><h2>Voor je installeert</h2>
+<p>Zet <strong>Victron laadstop</strong> aan. Stop P1 gecontroleerd met de bestaande actie en stop daarna profiel B. Wacht tot open herstel is afgehandeld.</p>
+<p>De app controleert deze toestand opnieuw, maakt een Home Assistant-back-up en herstart Home Assistant. Laadstop blijft aan. Hervat de regeling daarna zelf na controle.</p>
+<button id="check">Controleren op updates</button><p id="proposal"></p><p id="notes"></p>
+<label id="consentWrap" hidden><input id="consent" type="checkbox"> Ik keur deze versie goed, inclusief back-up en herstart van Home Assistant.</label>
+<button id="install" hidden disabled>Deze versie installeren</button></section>
+<section aria-live="polite"><h2>Voortgang</h2><p id="message">Status ophalen…</p><p id="error" class="error"></p><small id="backup"></small></section>
+<section id="recovery" hidden><h2>Terug naar de vorige versie</h2>
+<p>De vorige component blijft bewaard. Terugzetten herstart Home Assistant en laat laadstop aan. Ook hiervoor moeten P1 en profiel B gecontroleerd gestopt zijn.</p>
+<label><input id="restoreConsent" type="checkbox"> Ik wil de vorige versie terugzetten en Home Assistant herstarten.</label>
+<button class="secondary" id="restore" disabled>Vorige versie terugzetten</button>
+<p><small>Start Home Assistant niet meer, gebruik dan de bewaarde Home Assistant-back-up via de herstelvoorzieningen van je installatie. Deze knop omzeilt geen ontbrekende veiligheidsstatus.</small></p></section>
+</main><script>
+const byId=id=>document.getElementById(id);
+let csrf="", approval=null, busy=false;
+async function post(path,body={}){
+ const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},body:JSON.stringify(body)});
+ const d=await r.json();if(!r.ok)throw new Error(d.error||"Bewerking niet bevestigd.");return d;
+}
+async function status(){
+ try{
+ const r=await fetch("status");if(!r.ok)throw new Error();const d=await r.json();
+ csrf=d.csrf;busy=d.busy;byId("message").textContent=d.message;
+ byId("error").textContent=d.error||"";byId("backup").textContent=d.backup?"Home Assistant-back-up: "+d.backup:"";
+ byId("recovery").hidden=!d.can_restore;byId("check").disabled=busy;
+ byId("install").disabled=busy||!approval||!byId("consent").checked;
+ byId("restore").disabled=busy||!byId("restoreConsent").checked;
+ }catch{byId("message").textContent="Verbinding tijdelijk onderbroken. De bewerking gaat in de app verder; status wordt opnieuw opgehaald."}
+}
+byId("check").onclick=async()=>{
+ approval=null;byId("install").hidden=true;byId("consentWrap").hidden=true;byId("consent").checked=false;byId("check").disabled=true;
+ try{const p=await post("prepare");byId("proposal").textContent=p.up_to_date?"Versie "+p.installed+" is al geplaatst.":"Van "+p.installed+" naar "+p.version;
+ byId("notes").textContent=p.notes||"";if(!p.up_to_date){approval=p.approval;byId("consentWrap").hidden=false;byId("install").hidden=false;byId("install").textContent="Versie "+p.version+" installeren";}}
+ catch(e){byId("proposal").textContent=e.message}finally{await status()}
+};
+byId("consent").onchange=()=>{byId("install").disabled=busy||!approval||!byId("consent").checked};
+byId("restoreConsent").onchange=()=>{byId("restore").disabled=busy||!byId("restoreConsent").checked};
+byId("install").onclick=async()=>{const a=approval;approval=null;byId("install").disabled=true;try{await post("install",{approval:a})}catch(e){byId("proposal").textContent=e.message}await status()};
+byId("restore").onclick=async()=>{byId("restore").disabled=true;byId("restoreConsent").checked=false;try{await post("restore",{confirm:"HERSTEL_VORIGE_VERSIE"})}catch(e){byId("proposal").textContent=e.message}await status()};
+status();setInterval(status,4000);
+</script></html>
