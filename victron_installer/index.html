@@ -23,7 +23,7 @@ button:disabled{opacity:.45;cursor:wait}.secondary{color:#17664c;background:#e6f
 <label><input id="restoreConsent" type="checkbox"> Ik wil de vorige versie terugzetten en Home Assistant herstarten.</label>
 <button class="secondary" id="restore" disabled>Vorige versie terugzetten</button>
 <p><small>Start Home Assistant niet meer, gebruik dan de bewaarde Home Assistant-back-up via de herstelvoorzieningen van je installatie. Deze knop omzeilt geen ontbrekende veiligheidsstatus.</small></p></section>
-</main><script>
+<section><h2>Opslagcontrole</h2><p>Deze controle leest alleen het P1-journaal. Ze wijzigt geen instellingen of opgeslagen gegevens.</p><button class="secondary" id="storage">Controleer P1-opslag</button><pre id="storageResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></section></main><script>
 const byId=id=>document.getElementById(id);
 let csrf="", approval=null, busy=false;
 async function post(path,body={}){
@@ -50,5 +50,6 @@ byId("consent").onchange=()=>{byId("install").disabled=busy||!approval||!byId("c
 byId("restoreConsent").onchange=()=>{byId("restore").disabled=busy||!byId("restoreConsent").checked};
 byId("install").onclick=async()=>{const a=approval;approval=null;byId("install").disabled=true;try{await post("install",{approval:a})}catch(e){byId("proposal").textContent=e.message}await status()};
 byId("restore").onclick=async()=>{byId("restore").disabled=true;byId("restoreConsent").checked=false;try{await post("restore",{confirm:"HERSTEL_VORIGE_VERSIE"})}catch(e){byId("proposal").textContent=e.message}await status()};
+byId("storage").onclick=async()=>{byId("storage").disabled=true;try{const r=await fetch("storage-health");const d=await r.json();byId("storageResult").textContent=JSON.stringify(d,null,2)}catch{byId("storageResult").textContent="Opslagcontrole niet bereikbaar."}finally{byId("storage").disabled=false}};
 status();setInterval(status,4000);
 </script></html>

@@ -329,3 +329,28 @@ def test_github_trims_pasted_token_and_reports_failing_step(monkeypatch):
     monkeypatch.setattr(engine, "request_json", request)
     with pytest.raises(Refused, match="GitHub bronversie:"):
         GitHub("  example-token\n").get("/commits/main")
+
+def test_storage_health_reads_fixed_journal_without_exposing_payload(tmp_path):
+    path = tmp_path / ".storage" / (DOMAIN + ".p1_regeling_v1")
+    path.parent.mkdir()
+    data = {"schema": 1, "armed": False, "blocked": "P1_OPSLAG_NIET_BEVESTIGD",
+            "lease": None, "pending": None, "sequence": 7,
+            "events": [{"nr": 7, "code": "P1_GEBLOKKEERD", "tijd_lokaal": "fixture",
+                        "reden": "P1_OPSLAG_NIET_BEVESTIGD", "private_identity": "NEVER_RETURN"}],
+            "private_identity": "NEVER_RETURN"}
+    path.write_text(json.dumps({"version": 1, "data": data}))
+    before = path.read_bytes()
+    result = engine.storage_health(tmp_path)
+    assert result["sequence"] == 7 and not result["lease_aanwezig"]
+    assert "NEVER_RETURN" not in json.dumps(result)
+    assert before == path.read_bytes()
+
+def test_storage_health_does_not_replace_corrupt_or_missing_journal(tmp_path):
+    with pytest.raises(Refused):
+        engine.storage_health(tmp_path)
+    path = tmp_path / ".storage" / (DOMAIN + ".p1_regeling_v1")
+    path.parent.mkdir()
+    path.write_text("{corrupt")
+    with pytest.raises(Refused):
+        engine.storage_health(tmp_path)
+    assert path.read_text() == "{corrupt"

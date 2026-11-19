@@ -7,7 +7,7 @@ import secrets
 import threading
 from urllib.parse import urlsplit
 
-from engine import GitHub, Installer, Refused, Supervisor
+from engine import GitHub, Installer, Refused, Supervisor, storage_health
 
 class App:
     def __init__(self, installer):
@@ -61,6 +61,11 @@ def handler_for(app):
                 return self.reply(403, {"error": "Alleen beschikbaar via Home Assistant ingress."})
             if self.path == "/":
                 return self.reply(200, Path(__file__).with_name("index.html").read_bytes(), "text/html")
+            if self.path == "/storage-health":
+                try:
+                    return self.reply(200, storage_health(app.installer.root))
+                except Refused as e:
+                    return self.reply(409, {"error": str(e)})
             if self.path == "/status":
                 return self.reply(200, app.status())
             return self.reply(404, {})

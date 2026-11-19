@@ -410,3 +410,37 @@ class Installer:
                 pass
             time.sleep(3)
         raise Refused("Herstart of veilige versiecontrole niet bevestigd. Controleer de appstatus en de Home Assistant-back-up.")
+
+def storage_health(root):
+    """Read only the fixed P1 journal; never return identities or raw event payloads."""
+    from datetime import datetime, timezone
+    path = Path(root) / ".storage" / (DOMAIN + ".p1_regeling_v1")
+    if path.is_symlink() or not path.is_file():
+        raise Refused("P1-opslag ontbreekt of is een koppeling; er is niets gewijzigd.")
+    raw = path.read_bytes()
+    if len(raw) > 4 * 1024 * 1024:
+        raise Refused("P1-opslag is onverwacht groot; er is niets gewijzigd.")
+    try:
+        envelope = json.loads(raw)
+        data = envelope["data"]
+        if not isinstance(envelope, dict) or not isinstance(data, dict):
+            raise ValueError()
+        events = data.get("events", [])
+        if not isinstance(events, list):
+            raise ValueError()
+        latest = events[-1] if events and isinstance(events[-1], dict) else {}
+        return {"controle": "ALLEEN_GELEZEN",
+                "bestand_bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "gewijzigd_utc": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+                "store_version": envelope.get("version"),
+                "schema": data.get("schema"),
+                "armed": data.get("armed"),
+                "blocked": str(data.get("blocked"))[:180],
+                "lease_aanwezig": data.get("lease") is not None,
+                "pending_aanwezig": data.get("pending") is not None,
+                "sequence": data.get("sequence"),
+                "events": len(events),
+                "laatste_event": {k: str(latest.get(k))[:180] for k in ("nr", "tijd_lokaal", "code", "reden")}}
+    except (ValueError, KeyError, TypeError):
+        raise Refused("P1-opslag is niet als geldig journaal leesbaar; er is niets gewijzigd.") from None
