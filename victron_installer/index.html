@@ -18,6 +18,7 @@ button:disabled{opacity:.45;cursor:wait}.secondary{color:#17664c;background:#e6f
 <label id="consentWrap" hidden><input id="consent" type="checkbox"> Ik keur deze versie goed, inclusief back-up en herstart van Home Assistant.</label>
 <button id="install" hidden disabled>Deze versie installeren</button></section>
 <section aria-live="polite"><h2>Voortgang</h2><p id="message">Status ophalen…</p><p id="error" class="error"></p><small id="backup"></small></section>
+<section id="confirmSection" hidden><h2>Installatie bevestigen</h2><p>Zet laadstop aan en stop P1 en profiel B gecontroleerd. De app vergelijkt de geplaatste bestanden met de release en controleert de draaiende versie.</p><button id="confirmStarted">Geplaatste versie controleren en bevestigen</button></section>
 <section id="recovery" hidden><h2>Terug naar de vorige versie</h2>
 <p>De vorige component blijft bewaard. Terugzetten herstart Home Assistant en laat laadstop aan. Ook hiervoor moeten P1 en profiel B gecontroleerd gestopt zijn.</p>
 <label><input id="restoreConsent" type="checkbox"> Ik wil de vorige versie terugzetten en Home Assistant herstarten.</label>
@@ -35,6 +36,7 @@ async function status(){
  const r=await fetch("status");if(!r.ok)throw new Error();const d=await r.json();
  csrf=d.csrf;busy=d.busy;byId("message").textContent=d.message;
  byId("error").textContent=d.error||"";byId("backup").textContent=d.backup?"Home Assistant-back-up: "+d.backup:"";
+ byId("confirmSection").hidden=!d.can_confirm;byId("confirmStarted").disabled=busy;
  byId("recovery").hidden=!d.can_restore;byId("check").disabled=busy;
  byId("install").disabled=busy||!approval||!byId("consent").checked;
  byId("restore").disabled=busy||!byId("restoreConsent").checked;
@@ -49,6 +51,7 @@ byId("check").onclick=async()=>{
 byId("consent").onchange=()=>{byId("install").disabled=busy||!approval||!byId("consent").checked};
 byId("restoreConsent").onchange=()=>{byId("restore").disabled=busy||!byId("restoreConsent").checked};
 byId("install").onclick=async()=>{const a=approval;approval=null;byId("install").disabled=true;try{await post("install",{approval:a})}catch(e){byId("proposal").textContent=e.message}await status()};
+byId("confirmStarted").onclick=async()=>{byId("confirmStarted").disabled=true;try{await post("confirm-started")}catch(e){byId("proposal").textContent=e.message}await status()};
 byId("restore").onclick=async()=>{byId("restore").disabled=true;byId("restoreConsent").checked=false;try{await post("restore",{confirm:"HERSTEL_VORIGE_VERSIE"})}catch(e){byId("proposal").textContent=e.message}await status()};
 byId("storage").onclick=async()=>{byId("storage").disabled=true;try{const r=await fetch("storage-health");const d=await r.json();byId("storageResult").textContent=JSON.stringify(d,null,2)}catch{byId("storageResult").textContent="Opslagcontrole niet bereikbaar."}finally{byId("storage").disabled=false}};
 status();setInterval(status,4000);
