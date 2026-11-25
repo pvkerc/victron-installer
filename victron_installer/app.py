@@ -23,6 +23,7 @@ class App:
         return {"busy": self.busy, "phase": p["phase"], "message": p["message"],
                 "error": self.error, "csrf": self.csrf,
                 "can_restore": bool(p.get("transaction")),
+                "can_confirm": p["phase"] == "starting",
                 "backup": p.get("supervisor_backup")}
 
     def run(self, operation, *args):
@@ -94,6 +95,9 @@ def handler_for(app):
                             raise Refused("Er loopt al een bewerking.")
                         plan = app.installer.approve(body.get("approval"))
                     app.run(app.installer.install, plan)
+                    return self.reply(202, {})
+                if self.path == "/confirm-started":
+                    app.run(app.installer.confirm_started_installation)
                     return self.reply(202, {})
                 if self.path == "/restore":
                     if body.get("confirm") != "HERSTEL_VORIGE_VERSIE":

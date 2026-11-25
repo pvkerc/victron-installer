@@ -10,6 +10,7 @@ import re
 import secrets
 import shutil
 import stat
+import tempfile
 import threading
 import time
 import urllib.error
@@ -274,7 +275,7 @@ class Installer:
         if self.journal.exists():
             j = json.loads(self.journal.read_text())
             self.progress = j
-            if j["phase"] not in TERMINAL:
+            if j["phase"] not in TERMINAL and j["phase"] != "starting":
                 self.progress["message"] = "Onderbroken installatie. Geen automatische hervatting. Kies Vorige versie terugzetten."
 
     def save(self, phase, message, **extra):
@@ -398,6 +399,33 @@ class Installer:
             self.wait_ready(self.progress["old"])
             self.api.check()
             self.save("restored", "Vorige versie bevestigd. Laadstop blijft aan.")
+
+    def confirm_started_installation(self):
+        """Retry verification of an already placed release without restarting Core."""
+        with self.lock:
+            if self.progress["phase"] != "starting":
+                raise Refused("Er is geen geplaatste versie waarvan de bevestiging openstaat.")
+            version = self.progress["version"]
+            commit = self.progress["commit"]
+            if not re.fullmatch(r"[a-f0-9]{40}", commit):
+                raise Refused("Ongeldige bronversie in het installatieregister.")
+            catalog = json.loads(self.github.contents("updates/catalog.json", commit))
+            item = catalog.get("current")
+            validate_item(item)
+            if catalog.get("schema") != 1 or item["version"] != version:
+                raise Refused("Pakketlijst en installatieregister komen niet overeen.")
+            package = self.github.contents(item["path"], commit)
+            with tempfile.TemporaryDirectory(dir=self.data) as work:
+                expected = Path(work) / "release"
+                unpack_package(package, item, expected)
+                if digest_tree(self.current) != digest_tree(expected):
+                    raise Refused("De geplaatste bestanden komen niet overeen met de release.")
+            if self.api.call("/core/api/config").get("state") != "RUNNING":
+                raise Refused("Home Assistant draait nog niet.")
+            if safe_state(self.api) != version:
+                raise Refused("De actieve versie komt niet overeen met de release.")
+            self.api.check()
+            self.save("installed", "Versie " + version + " is bevestigd. Laadstop blijft aan.")
 
     def wait_ready(self, version):
         deadline = time.monotonic() + 300
